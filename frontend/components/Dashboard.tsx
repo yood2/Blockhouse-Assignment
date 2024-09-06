@@ -7,11 +7,16 @@ import BarChart from './charts/BarChart';
 import PieChart from './charts/PieChart';
 import styles from './Dashboard.css';
 
+interface ChartData {
+    data: any[];
+    labels?: string[];
+}
+
 const Dashboard: React.FC = () => {
-    const [candlestickData, setCandlestickData] = useState<any>(null);
-    const [lineChartData, setLineChartData] = useState<any>(null);
-    const [barChartData, setBarChartData] = useState<any>(null);
-    const [pieChartData, setPieChartData] = useState<any>(null);
+    const [candlestickData, setCandlestickData] = useState<any[]>([]);
+    const [lineChartData, setLineChartData] = useState<any[]>([]);
+    const [barChartData, setBarChartData] = useState<any[]>([]);
+    const [pieChartData, setPieChartData] = useState<any[]>([]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -31,10 +36,64 @@ const Dashboard: React.FC = () => {
                     ),
                 ]);
 
-                setCandlestickData(candlestick);
-                setLineChartData(line);
-                setBarChartData(bar);
-                setPieChartData(pie);
+                console.log('Raw data:', { candlestick, line, bar, pie });
+
+                if (Array.isArray(candlestick.data)) {
+                    setCandlestickData(
+                        candlestick.data.map((d: any) => ({
+                            ...d,
+                            date: new Date(d.x),
+                        }))
+                    );
+                } else {
+                    console.error(
+                        'Candlestick data is not an array:',
+                        candlestick
+                    );
+                }
+
+                if (Array.isArray(line.data) && Array.isArray(line.labels)) {
+                    setLineChartData(
+                        line.data.map((value: number, index: number) => ({
+                            date: new Date(2023, index),
+                            value,
+                        }))
+                    );
+                } else {
+                    console.error(
+                        'Line chart data is not in expected format:',
+                        line
+                    );
+                }
+
+                // Process Bar Chart data
+                if (Array.isArray(bar.data) && Array.isArray(bar.labels)) {
+                    setBarChartData(
+                        bar.data.map((value: number, index: number) => ({
+                            label: bar.labels[index],
+                            value,
+                        }))
+                    );
+                } else {
+                    console.error(
+                        'Bar chart data is not in expected format:',
+                        bar
+                    );
+                }
+
+                if (Array.isArray(pie.data) && Array.isArray(pie.labels)) {
+                    setPieChartData(
+                        pie.data.map((value: number, index: number) => ({
+                            label: pie.labels[index],
+                            value,
+                        }))
+                    );
+                } else {
+                    console.error(
+                        'Pie chart data is not in expected format:',
+                        pie
+                    );
+                }
             } catch (error) {
                 console.error('Error fetching data:', error);
             }
@@ -47,34 +106,38 @@ const Dashboard: React.FC = () => {
         <div className={styles.dashboard}>
             <div className={styles.chartContainer}>
                 <h2>Candlestick Chart</h2>
-                {candlestickData ? (
-                    <CandlestickChart data={candlestickData} />
+                {candlestickData.length > 0 ? (
+                    <CandlestickChart
+                        data={candlestickData}
+                        width={400}
+                        height={300}
+                    />
                 ) : (
-                    <p>Loading...</p>
+                    <p>Loading Candlestick data...</p>
                 )}
             </div>
             <div className={styles.chartContainer}>
                 <h2>Line Chart</h2>
-                {lineChartData ? (
-                    <LineChart data={lineChartData} />
+                {lineChartData.length > 0 ? (
+                    <LineChart data={lineChartData} width={400} height={300} />
                 ) : (
-                    <p>Loading...</p>
+                    <p>Loading Line Chart data...</p>
                 )}
             </div>
             <div className={styles.chartContainer}>
                 <h2>Bar Chart</h2>
-                {barChartData ? (
-                    <BarChart data={barChartData} />
+                {barChartData.length > 0 ? (
+                    <BarChart data={barChartData} width={400} height={300} />
                 ) : (
-                    <p>Loading...</p>
+                    <p>Loading Bar Chart data...</p>
                 )}
             </div>
             <div className={styles.chartContainer}>
                 <h2>Pie Chart</h2>
-                {pieChartData ? (
-                    <PieChart data={pieChartData} />
+                {pieChartData.length > 0 ? (
+                    <PieChart data={pieChartData} width={400} height={300} />
                 ) : (
-                    <p>Loading...</p>
+                    <p>Loading Pie Chart data...</p>
                 )}
             </div>
         </div>

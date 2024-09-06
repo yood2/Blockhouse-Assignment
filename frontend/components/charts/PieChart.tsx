@@ -1,43 +1,66 @@
+'use client';
+
 import React from 'react';
-import {
-    ResponsiveContainer,
-    PieChart as RechartsPie,
-    Pie,
-    Tooltip,
-    Cell,
-} from 'recharts';
+import * as d3 from 'd3';
+import BaseChartD3 from './BaseChart';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
+interface PieChartProps {
+    data: { label: string; value: number }[];
+    width: number;
+    height: number;
+}
 
-const PieChart: React.FC<{ data: any }> = ({ data }) => {
-    const chartData = data.labels.map((label: string, index: number) => ({
-        name: label,
-        value: data.data[index],
-    }));
+const PieChartD3: React.FC<PieChartProps> = ({ data, width, height }) => {
+    const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
+    const radius = Math.min(innerWidth, innerHeight) / 2;
+
+    const render = (
+        svg: d3.Selection<SVGGElement, unknown, null, undefined>
+    ) => {
+        const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+        const pie = d3
+            .pie<{ label: string; value: number }>()
+            .value((d) => d.value);
+
+        const arc = d3
+            .arc<d3.PieArcDatum<{ label: string; value: number }>>()
+            .innerRadius(0)
+            .outerRadius(radius);
+
+        const arcs = pie(data);
+
+        svg.attr(
+            'transform',
+            `translate(${innerWidth / 2},${innerHeight / 2})`
+        );
+
+        svg.selectAll('path')
+            .data(arcs)
+            .enter()
+            .append('path')
+            .attr('d', arc)
+            .attr('fill', (d, i) => color(`${i}`));
+
+        svg.selectAll('text')
+            .data(arcs)
+            .enter()
+            .append('text')
+            .attr('transform', (d) => `translate(${arc.centroid(d)})`)
+            .attr('text-anchor', 'middle')
+            .text((d) => d.data.label);
+    };
 
     return (
-        <ResponsiveContainer width="100%" height={300}>
-            <RechartsPie>
-                <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                >
-                    {chartData.map((entry: any, index: number) => (
-                        <Cell
-                            key={`cell-${index}`}
-                            fill={COLORS[index % COLORS.length]}
-                        />
-                    ))}
-                </Pie>
-                <Tooltip />
-            </RechartsPie>
-        </ResponsiveContainer>
+        <BaseChartD3
+            width={width}
+            height={height}
+            margin={margin}
+            render={render}
+        />
     );
 };
 
-export default PieChart;
+export default PieChartD3;
