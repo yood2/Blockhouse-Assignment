@@ -1,60 +1,105 @@
 'use client';
 
-import React from 'react';
-import * as d3 from 'd3';
-import BaseChartD3 from './BaseChart';
+import React, { useEffect, useRef, useState } from 'react';
+import Chart from 'chart.js/auto';
 
-interface LineChartProps {
-    data: { date: Date; value: number }[];
-    width: number;
-    height: number;
+interface ChartData {
+    labels: string[];
+    data: number[];
 }
 
-const LineChartD3: React.FC<LineChartProps> = ({ data, width, height }) => {
-    const margin = { top: 20, right: 30, bottom: 30, left: 40 };
-    const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
+const LineChart: React.FC = () => {
+    const [chartData, setChartData] = useState<ChartData | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const chartRef = useRef<HTMLCanvasElement | null>(null);
+    const chartInstance = useRef<Chart | null>(null);
 
-    const render = (
-        svg: d3.Selection<SVGGElement, unknown, null, undefined>
-    ) => {
-        const x = d3
-            .scaleTime()
-            .range([0, innerWidth])
-            .domain(d3.extent(data, (d) => d.date) as [Date, Date]);
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const response = await fetch(
+                    'http://127.0.0.1:8000/api/line-chart-data/'
+                );
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                setChartData(data);
+            } catch (e) {
+                setError('Failed to fetch data');
+                console.error('Error:', e);
+            }
+        };
 
-        const y = d3
-            .scaleLinear()
-            .range([innerHeight, 0])
-            .domain([0, d3.max(data, (d) => d.value) || 0]);
+        fetchData();
+    }, []);
 
-        const line = d3
-            .line<{ date: Date; value: number }>()
-            .x((d) => x(d.date))
-            .y((d) => y(d.value));
+    useEffect(() => {
+        if (chartData && chartRef.current) {
+            const ctx = chartRef.current.getContext('2d');
 
-        svg.append('g')
-            .attr('transform', `translate(0,${innerHeight})`)
-            .call(d3.axisBottom(x));
+            if (ctx) {
+                // Destroy existing chart if it exists
+                if (chartInstance.current) {
+                    chartInstance.current.destroy();
+                }
 
-        svg.append('g').call(d3.axisLeft(y));
+                // Create new chart
+                chartInstance.current = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: chartData.labels,
+                        datasets: [
+                            {
+                                label: 'Line Dataset',
+                                data: chartData.data,
+                                borderColor: 'rgb(75, 192, 192)',
+                                tension: 0.1,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            title: {
+                                display: true,
+                                text: 'Line Chart',
+                            },
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                            },
+                        },
+                    },
+                });
+            }
+        }
 
-        svg.append('path')
-            .datum(data)
-            .attr('fill', 'none')
-            .attr('stroke', 'steelblue')
-            .attr('stroke-width', 1.5)
-            .attr('d', line);
-    };
+        // Cleanup function
+        return () => {
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+            }
+        };
+    }, [chartData]);
+
+    if (error) {
+        return <div>Error: {error}</div>;
+    }
+
+    if (!chartData) {
+        return <div>Loading...</div>;
+    }
 
     return (
-        <BaseChartD3
-            width={width}
-            height={height}
-            margin={margin}
-            render={render}
-        />
+        <div>
+            <canvas ref={chartRef} />
+        </div>
     );
 };
 
-export default LineChartD3;
+export default LineChart;

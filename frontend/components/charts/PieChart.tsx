@@ -1,66 +1,109 @@
 'use client';
 
-import React from 'react';
-import * as d3 from 'd3';
-import BaseChartD3 from './BaseChart';
+import React, { useEffect, useRef, useState } from 'react';
+import Chart from 'chart.js/auto';
 
-interface PieChartProps {
-    data: { label: string; value: number }[];
-    width: number;
-    height: number;
+interface ChartData {
+    labels: string[];
+    data: number[];
 }
 
-const PieChartD3: React.FC<PieChartProps> = ({ data, width, height }) => {
-    const margin = { top: 20, right: 20, bottom: 20, left: 20 };
-    const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
-    const radius = Math.min(innerWidth, innerHeight) / 2;
+const PieChart: React.FC = () => {
+    const [chartData, setChartData] = useState<ChartData | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const chartRef = useRef<HTMLCanvasElement | null>(null);
+    const chartInstance = useRef<Chart | null>(null);
 
-    const render = (
-        svg: d3.Selection<SVGGElement, unknown, null, undefined>
-    ) => {
-        const color = d3.scaleOrdinal(d3.schemeCategory10);
-
-        const pie = d3
-            .pie<{ label: string; value: number }>()
-            .value((d) => d.value);
-
-        const arc = d3
-            .arc<d3.PieArcDatum<{ label: string; value: number }>>()
-            .innerRadius(0)
-            .outerRadius(radius);
-
-        const arcs = pie(data);
-
-        svg.attr(
-            'transform',
-            `translate(${innerWidth / 2},${innerHeight / 2})`
-        );
-
-        svg.selectAll('path')
-            .data(arcs)
-            .enter()
-            .append('path')
-            .attr('d', arc)
-            .attr('fill', (d, i) => color(`${i}`));
-
-        svg.selectAll('text')
-            .data(arcs)
-            .enter()
-            .append('text')
-            .attr('transform', (d) => `translate(${arc.centroid(d)})`)
-            .attr('text-anchor', 'middle')
-            .text((d) => d.data.label);
+    const generateColors = (numColors: number) => {
+        const colors = [];
+        for (let i = 0; i < numColors; i++) {
+            const hue = (i * 137.508) % 360; // Use golden angle approximation
+            colors.push(`hsla(${hue}, 70%, 60%, 0.7)`);
+        }
+        return colors;
     };
 
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const response = await fetch(
+                    'http://127.0.0.1:8000/api/pie-chart-data/'
+                );
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                setChartData(data);
+            } catch (e) {
+                setError('Failed to fetch data');
+                console.error('Error:', e);
+            }
+        };
+
+        fetchData();
+    }, []);
+
+    useEffect(() => {
+        if (chartData && chartRef.current) {
+            const ctx = chartRef.current.getContext('2d');
+
+            if (ctx) {
+                // Destroy existing chart if it exists
+                if (chartInstance.current) {
+                    chartInstance.current.destroy();
+                }
+
+                const colors = generateColors(chartData.labels.length);
+
+                // Create new chart
+                chartInstance.current = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: chartData.labels,
+                        datasets: [
+                            {
+                                data: chartData.data,
+                                backgroundColor: colors,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            title: {
+                                display: true,
+                                text: 'Pie Chart',
+                            },
+                        },
+                    },
+                });
+            }
+        }
+
+        // Cleanup function
+        return () => {
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+            }
+        };
+    }, [chartData]);
+
+    if (error) {
+        return <div>Error: {error}</div>;
+    }
+
+    if (!chartData) {
+        return <div>Loading...</div>;
+    }
+
     return (
-        <BaseChartD3
-            width={width}
-            height={height}
-            margin={margin}
-            render={render}
-        />
+        <div>
+            <canvas ref={chartRef} />
+        </div>
     );
 };
 
-export default PieChartD3;
+export default PieChart;

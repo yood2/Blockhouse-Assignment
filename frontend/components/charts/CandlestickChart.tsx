@@ -1,90 +1,132 @@
-'use client';
-
-import React from 'react';
-import * as d3 from 'd3';
-import BaseChartD3 from './BaseChart';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface CandlestickData {
-    date: Date;
+    x: string;
     open: number;
     high: number;
     low: number;
     close: number;
 }
 
-interface CandlestickChartProps {
-    data: CandlestickData[];
-    width: number;
-    height: number;
-}
+const CandlestickChart: React.FC = () => {
+    const [chartData, setChartData] = useState<CandlestickData[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-const CandlestickChartD3: React.FC<CandlestickChartProps> = ({
-    data,
-    width,
-    height,
-}) => {
-    const margin = { top: 20, right: 30, bottom: 30, left: 40 };
-    const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const response = await fetch(
+                    'http://127.0.0.1:8000/api/candlestick-data/'
+                );
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                setChartData(data.data);
+            } catch (e) {
+                setError('Failed to fetch data');
+                console.error('Error:', e);
+            }
+        };
 
-    const render = (
-        svg: d3.Selection<SVGGElement, unknown, null, undefined>
+        fetchData();
+    }, []);
+
+    useEffect(() => {
+        if (chartData && canvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            if (ctx) {
+                drawChart(ctx, chartData);
+            }
+        }
+    }, [chartData]);
+
+    const drawChart = (
+        ctx: CanvasRenderingContext2D,
+        data: CandlestickData[]
     ) => {
-        const x = d3
-            .scaleBand()
-            .range([0, innerWidth])
-            .padding(0.1)
-            .domain(data.map((d) => d.date.toISOString()));
+        const width = ctx.canvas.width;
+        const height = ctx.canvas.height;
+        const padding = { top: 20, right: 20, bottom: 20, left: 40 };
 
-        const y = d3
-            .scaleLinear()
-            .range([innerHeight, 0])
-            .domain([
-                d3.min(data, (d) => d.low) || 0,
-                d3.max(data, (d) => d.high) || 0,
-            ]);
+        ctx.clearRect(0, 0, width, height);
 
-        svg.append('g')
-            .attr('transform', `translate(0,${innerHeight})`)
-            .call(d3.axisBottom(x));
+        const values = data.flatMap((d) => [d.open, d.high, d.low, d.close]);
+        const minValue = Math.min(...values);
+        const maxValue = Math.max(...values);
 
-        svg.append('g').call(d3.axisLeft(y));
+        const xScale =
+            (width - padding.left - padding.right) / (data.length - 1);
+        const yScale =
+            (height - padding.top - padding.bottom) / (maxValue - minValue);
 
-        svg.selectAll('.candlestick')
-            .data(data)
-            .enter()
-            .append('line')
-            .attr(
-                'x1',
-                (d) => (x(d.date.toISOString()) || 0) + x.bandwidth() / 2
-            )
-            .attr(
-                'x2',
-                (d) => (x(d.date.toISOString()) || 0) + x.bandwidth() / 2
-            )
-            .attr('y1', (d) => y(d.low))
-            .attr('y2', (d) => y(d.high))
-            .attr('stroke', 'black');
+        // Draw axes
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, height - padding.bottom);
+        ctx.lineTo(width - padding.right, height - padding.bottom);
+        ctx.stroke();
 
-        svg.selectAll('.candle')
-            .data(data)
-            .enter()
-            .append('rect')
-            .attr('x', (d) => x(d.date.toISOString()) || 0)
-            .attr('y', (d) => y(Math.max(d.open, d.close)))
-            .attr('width', x.bandwidth())
-            .attr('height', (d) => Math.abs(y(d.open) - y(d.close)))
-            .attr('fill', (d) => (d.open > d.close ? 'red' : 'green'));
+        // Draw candlesticks
+        data.forEach((d, i) => {
+            const x = padding.left + i * xScale;
+            const open = height - padding.bottom - (d.open - minValue) * yScale;
+            const close =
+                height - padding.bottom - (d.close - minValue) * yScale;
+            const high = height - padding.bottom - (d.high - minValue) * yScale;
+            const low = height - padding.bottom - (d.low - minValue) * yScale;
+
+            // Draw the wick
+            ctx.beginPath();
+            ctx.moveTo(x, high);
+            ctx.lineTo(x, low);
+            ctx.stroke();
+
+            // Draw the body
+            ctx.fillStyle = d.open > d.close ? 'red' : 'green';
+            ctx.fillRect(
+                x - 3,
+                Math.min(open, close),
+                6,
+                Math.abs(close - open)
+            );
+        });
+
+        // Draw y-axis labels
+        ctx.fillStyle = 'black';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i <= 5; i++) {
+            const value = minValue + (maxValue - minValue) * (i / 5);
+            const y = height - padding.bottom - (value - minValue) * yScale;
+            ctx.fillText(value.toFixed(2), padding.left - 5, y);
+        }
+
+        // Draw x-axis labels (showing only first and last date for simplicity)
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(data[0].x, padding.left, height - padding.bottom + 5);
+        ctx.fillText(
+            data[data.length - 1].x,
+            width - padding.right,
+            height - padding.bottom + 5
+        );
     };
 
+    if (error) {
+        return <div>Error: {error}</div>;
+    }
+
+    if (!chartData) {
+        return <div>Loading...</div>;
+    }
+
     return (
-        <BaseChartD3
-            width={width}
-            height={height}
-            margin={margin}
-            render={render}
-        />
+        <div>
+            <canvas ref={canvasRef} width={600} height={400} />
+        </div>
     );
 };
 
-export default CandlestickChartD3;
+export default CandlestickChart;
